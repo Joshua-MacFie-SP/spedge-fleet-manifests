@@ -1,0 +1,7 @@
+defaultNamespace: spedge
+
+# Netbird VPN package: deployed only to clusters labelled package-netbird=true
+targets:
+  - clusterSelector:
+      matchLabels:
+        package-netbird: "true"

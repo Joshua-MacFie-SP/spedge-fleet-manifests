@@ -1,0 +1,138 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodered
+  namespace: spedge
+  labels:
+    app: nodered
+spec:
+  replicas: 1
+  # Recreate strategy required when using hostPort
+  # RollingUpdate fails because new pod can't bind to port while old pod exists
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nodered
+  template:
+    metadata:
+      labels:
+        app: nodered
+    spec:
+      initContainers:
+        # Create required directories before Node-RED starts
+        # Mirrors Docker volume mounts from grimesNode docker-compose.yml
+        - name: init-directories
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /data/logs /data/config
+              chown -R 1000:1000 /data/logs /data/config
+          volumeMounts:
+            - name: nodered-data
+              mountPath: /data
+      containers:
+        - name: nodered
+          image: nodered/node-red:latest-debian
+          env:
+            - name: TZ
+              value: "America/Chicago"
+            - name: NODE_RED_ENABLE_PROJECTS
+              value: "true"
+            # Redis connection info for Node-RED flows
+            # In K8s, service name 'redis' resolves via DNS
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: nodered-username
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: nodered-password
+          ports:
+            - containerPort: 1880
+              hostPort: 1880
+              name: http
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "3Gi"
+              cpu: "3000m"
+          volumeMounts:
+            - name: nodered-data
+              mountPath: /data
+            - name: nodered-settings
+              mountPath: /data/settings.js
+              subPath: settings.js
+            # Serial device for RS485/Modbus communication
+            - name: ttyusb0
+              mountPath: /dev/ttyUSB0
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 1880
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 1880
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          securityContext:
+            # Privileged required for serial device (ttyUSB0) access
+            # ioctl() calls for terminal settings are blocked by dropped capabilities
+            privileged: true
+            readOnlyRootFilesystem: false  # Node-RED writes to /data
+      # Run pod as node-red user (uid 1000 in official image)
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        # Add dialout group (GID 20) for serial device access
+        supplementalGroups:
+          - 20  # dialout group for /dev/ttyUSB*
+      volumes:
+        - name: nodered-data
+          persistentVolumeClaim:
+            claimName: nodered-data
+        - name: nodered-settings
+          configMap:
+            name: nodered-settings
+        # Serial device access for RS485/Modbus
+        - name: ttyusb0
+          hostPath:
+            path: /dev/ttyUSB0
+            # CharDeviceOrCreate: starts pod even if device absent (serial just won't work)
+            type: CharDeviceOrCreate
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodered
+  namespace: spedge
+  labels:
+    app: nodered
+spec:
+  # ClusterIP for internal access; hostPort handles external access on :1880
+  type: ClusterIP
+  ports:
+    - port: 1880
+      targetPort: 1880
+      name: http
+  selector:
+    app: nodered

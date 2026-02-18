@@ -1,0 +1,5 @@
+defaultNamespace: spedge
+
+# Base bundle: deployed to every registered edge cluster
+targets:
+  - clusterSelector: {}

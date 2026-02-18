@@ -1,0 +1,16 @@
+---
+# Persistent storage for Netbird configuration
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: netbird-config
+  namespace: spedge
+  labels:
+    app: netbird
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+  storageClassName: local-path

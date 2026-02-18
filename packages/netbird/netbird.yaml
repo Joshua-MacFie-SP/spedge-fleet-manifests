@@ -1,0 +1,124 @@
+---
+# Netbird VPN - runs as DaemonSet with host networking
+# Requires elevated privileges for VPN/tunnel management
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netbird
+  namespace: spedge
+  labels:
+    app: netbird
+spec:
+  selector:
+    matchLabels:
+      app: netbird
+  template:
+    metadata:
+      labels:
+        app: netbird
+    spec:
+      # Host networking required for VPN functionality
+      hostNetwork: true
+      # Use host's DNS
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: netbird
+          image: netbirdio/netbird:latest
+          env:
+            - name: NB_SETUP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: netbird-credentials
+                  key: setup-key
+            - name: NB_ENABLE_EXPERIMENTAL_LAZY_CONN
+              value: "true"
+            - name: NB_ALLOW_SERVER_SSH
+              value: "true"
+            - name: NB_LOG_LEVEL
+              value: "info"
+            - name: NB_LOG_FILE
+              value: "console"
+            - name: NB_MTU
+              value: "1280"
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: netbird-config
+              mountPath: /var/lib/netbird
+            - name: healthcheck
+              mountPath: /healthcheck.sh
+              subPath: healthcheck.sh
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "/healthcheck.sh"]
+            initialDelaySeconds: 60
+            periodSeconds: 300
+            timeoutSeconds: 30
+            failureThreshold: 2
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "netbird status 2>/dev/null | grep -q 'Management: Connected'"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          securityContext:
+            privileged: true
+      volumes:
+        - name: netbird-config
+          persistentVolumeClaim:
+            claimName: netbird-config
+        - name: healthcheck
+          configMap:
+            name: netbird-healthcheck
+            defaultMode: 0755
+
+---
+# Healthcheck script as ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netbird-healthcheck
+  namespace: spedge
+  labels:
+    app: netbird
+data:
+  healthcheck.sh: |
+    #!/bin/sh
+    # NetBird tunnel health check
+    # Returns unhealthy if tunnel shows connected but WireGuard keys are broken
+
+    # First check netbird daemon is connected
+    if ! netbird status 2>/dev/null | grep -q "Management: Connected"; then
+        echo "NetBird management not connected"
+        exit 1
+    fi
+
+    # Get a connected peer IP to test
+    PEER_IP=$(netbird status -d 2>/dev/null | grep -B1 "Status: Connected" | \
+      grep "NetBird IP:" | head -1 | awk '{print $3}' | cut -d/ -f1)
+
+    # If no connected peers, that's OK (lazy connections may all be idle)
+    if [ -z "$PEER_IP" ]; then
+        exit 0
+    fi
+
+    # Try to ping the peer - checking for broken tunnel error, not connectivity
+    PING_OUTPUT=$(ping -c 1 -W 5 "$PEER_IP" 2>&1)
+
+    # Check for the WireGuard broken key state
+    if echo "$PING_OUTPUT" | grep -q "Required key not available"; then
+        echo "WireGuard tunnel broken - Required key not available"
+        exit 1
+    fi
+
+    # Tunnel is healthy (ping success or normal network failure is fine)
+    exit 0

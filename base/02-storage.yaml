@@ -1,0 +1,35 @@
+---
+# Node-RED data persistence
+# Stores flows, credentials, and project data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nodered-data
+  namespace: spedge
+  labels:
+    app: nodered
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Redis data persistence
+# Stores RDB snapshots and AOF logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: spedge
+  labels:
+    app: redis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
