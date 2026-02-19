@@ -1,7 +1,8 @@
 defaultNamespace: spedge
 
-# Netbird VPN package: deployed only to clusters labelled package-netbird=true
+# Netbird VPN package: deployed to spedge clusters labelled package-netbird=true
 targets:
   - clusterSelector:
       matchLabels:
+        fleet-env: spedge
         package-netbird: "true"

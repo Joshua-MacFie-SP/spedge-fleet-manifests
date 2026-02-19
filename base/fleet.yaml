@@ -1,5 +1,7 @@
 defaultNamespace: spedge
 
-# Base bundle: deployed to every registered edge cluster
+# Base bundle: deployed to all spedge edge clusters
 targets:
-  - clusterSelector: {}
+  - clusterSelector:
+      matchLabels:
+        fleet-env: spedge
