@@ -116,8 +116,8 @@ spec:
         - name: ttyusb0
           hostPath:
             path: /dev/ttyUSB0
-            # CharDeviceOrCreate: starts pod even if device absent (serial just won't work)
-            type: CharDeviceOrCreate
+            # type "" skips validation - pod starts even if device absent
+            type: ""
 
 ---
 apiVersion: v1
