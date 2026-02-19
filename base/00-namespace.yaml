@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: spedge
-  labels:
-    app.kubernetes.io/name: spedge
-    app.kubernetes.io/part-of: spedge-edge-stack
