@@ -58,6 +58,9 @@ spec:
                 secretKeyRef:
                   name: redis-credentials
                   key: nodered-password
+            # Pre-built JSON connection string for Redis clients that expect one object
+            - name: NODE_REDIS
+              value: '{"host":"$(REDIS_HOST)","port":$(REDIS_PORT),"username":"$(REDIS_USERNAME)","password":"$(REDIS_PASSWORD)"}'
           ports:
             - containerPort: 1880
               hostPort: 1880
