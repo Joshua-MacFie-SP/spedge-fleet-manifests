@@ -61,6 +61,14 @@ spec:
             # Pre-built JSON connection string for Redis clients that expect one object
             - name: NODE_REDIS
               value: '{"host":"$(REDIS_HOST)","port":$(REDIS_PORT),"username":"$(REDIS_USERNAME)","password":"$(REDIS_PASSWORD)"}'
+            # Device-specific config - populated during provisioning by populate-k8s-secrets.sh
+            # optional: true means pod still starts if ConfigMap doesn't exist yet
+            - name: SITE_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: device-config
+                  key: site-id
+                  optional: true
           ports:
             - containerPort: 1880
               hostPort: 1880
